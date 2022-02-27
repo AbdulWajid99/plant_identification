@@ -1,29 +1,47 @@
+# importing required modules
+
+
 from fastapi import FastAPI, UploadFile, File
 import uvicorn
 import numpy as np
-import cv2
 import shutil
+import tensorflow
+from PIL import Image
+from tensorflow.keras.preprocessing import image
 
-app = FastAPI()
 
+# model import 
+model = tensorflow.keras.models.load_model("model_identification_10.h5")
+# classes label
+index_to_label = {0: 'Alstonia Scholaris',1: 'Arjun', 2: 'Chinar', 3: 'Guava', 4: 'Jamun', 5: 'Jatropha', 6: 'Lemon', 7: 'Mango', 8: 'Pomegranate', 9: 'Pongamia Pinnata'}
+# app initialization
+app = FastAPI()#
+
+# welcome message
 @app.get("/")
 def index():
     return{"Welcome to PAKPLANTS"}
 
-@app.post("/percent")
-def mask(file: UploadFile =File(...)):
-    with open(f'{file.filename}' , "wb") as buffer:
+# prediction endpoint
+@app.post("/plant")
+def predict(file: UploadFile =File(...)):
+    with open(file.filename, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    
-    img= cv2.imread(file.filename) 
-    grid_RGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    grid_HSV = cv2.cvtColor(grid_RGB, cv2.COLOR_RGB2HSV)
-    lower_green = np.array([36 ,0 , 0])
-    upper_green = np.array([102,255,255])
-    mask= cv2.inRange(grid_HSV, lower_green, upper_green)
-    green_perc = (np.sum(mask) / np.size(mask))/255
-    green_perc = green_perc*100
-    return{round(green_perc,3)}
+    Plant_image = Image.open(file.filename)
+    # resize image
+    Plant_image = Plant_image.resize((224, 224))
+    # convert image to numpy array
+    img_array = image.img_to_array(Plant_image)
+    img_array=img_array/255
+    # reshape image
+    image_np = np.expand_dims(img_array, axis=0)
+    # predict image
+    prediction =model.predict(image_np)
+    prediction=np.argmax(prediction, axis=1)
+    # return prediction
+    prediction=index_to_label[prediction[0]]
+    return{prediction}
+
 
 if __name__ == "__main__":
     uvicorn.run(app, debug=True)
